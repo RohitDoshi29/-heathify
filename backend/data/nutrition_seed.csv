@@ -1,0 +1,43 @@
+food_id,name,category,preparation,calories_100g,protein_100g,carbs_100g,fat_100g,fiber_100g,source
+steamed_rice,Steamed White Rice,grains,steamed,130.0,2.7,28.2,0.3,0.4,usda_fdc
+brown_rice,Cooked Brown Rice,grains,boiled,111.0,2.6,23.0,0.9,1.8,usda_fdc
+roti_chapati,Whole Wheat Roti/Chapati,breads,roasted,297.0,9.0,55.0,3.5,9.0,ifct_curated
+naan,Butter Naan,breads,baked_tandoor,310.0,8.7,50.2,7.9,2.2,ifct_curated
+paratha,Plain Paratha,breads,pan_fried,326.0,6.5,45.0,13.5,4.0,ifct_curated
+dal_tadka,Yellow Dal Tadka,legumes,cooked_tempered,116.0,6.8,14.5,3.6,3.8,ifct_curated
+dal_makhani,Dal Makhani,legumes,simmered_butter_cream,165.0,5.5,15.2,9.3,4.2,ifct_curated
+chana_masala,Chana Masala (Chickpeas),legumes,curried,164.0,8.9,27.4,2.6,7.6,ifct_curated
+rajma_curry,Rajma Curry (Kidney Beans),legumes,curried,140.0,7.5,21.0,2.8,6.0,ifct_curated
+paneer_butter_masala,Paneer Butter Masala,curries,gravy_rich,245.0,9.5,9.0,19.0,1.5,ifct_curated
+palak_paneer,Palak Paneer (Spinach Paneer),curries,gravy_greens,185.0,8.2,6.0,14.5,3.0,ifct_curated
+aloo_gobi,Aloo Gobi (Potato & Cauliflower),vegetables,sauteed,115.0,2.5,14.0,5.5,2.8,ifct_curated
+bhindi_masala,Bhindi Masala (Okra),vegetables,sauteed,95.0,2.0,8.5,6.0,3.2,ifct_curated
+chicken_biryani,Chicken Biryani,rice_dishes,layered_dum,180.0,9.5,22.0,5.8,1.2,ifct_curated
+veg_biryani,Vegetable Biryani,rice_dishes,layered_dum,155.0,3.8,24.5,4.8,2.5,ifct_curated
+butter_chicken,Butter Chicken (Murgh Makhani),poultry,creamy_tomato_gravy,210.0,14.0,5.5,14.5,1.0,ifct_curated
+tandoori_chicken,Tandoori Chicken,poultry,roasted_clay_oven,160.0,24.0,1.5,6.5,0.0,ifct_curated
+grilled_chicken_breast,Grilled Chicken Breast,poultry,grilled,165.0,31.0,0.0,3.6,0.0,usda_fdc
+boiled_egg,Boiled Egg (Whole),eggs,boiled,155.0,12.6,1.1,10.6,0.0,usda_fdc
+fried_egg,Fried Egg (Sunny Side Up),eggs,pan_fried,196.0,13.6,0.8,15.3,0.0,usda_fdc
+egg_omelette,Egg Omelette (Plain),eggs,pan_fried,154.0,11.0,0.7,11.7,0.0,usda_fdc
+scrambled_eggs,Scrambled Eggs,eggs,pan_fried,148.0,10.0,1.6,11.0,0.0,usda_fdc
+poached_egg,Poached Egg,eggs,poached,143.0,12.5,0.7,9.5,0.0,usda_fdc
+egg_bhurji,Egg Bhurji (Indian Scramble),eggs,spiced_sauteed,175.0,11.5,3.2,13.0,0.8,ifct_curated
+egg_curry,Egg Curry,curries,curried,142.0,9.5,4.5,10.0,1.2,ifct_curated
+masala_dosa,Masala Dosa with Potato Filling,breakfast,griddled_crisp,195.0,4.2,29.0,7.2,2.0,ifct_curated
+idli,Steamed Idli,breakfast,steamed,135.0,4.5,28.0,0.5,1.5,ifct_curated
+sambar,Vegetable Sambar,soups_curries,boiled_spiced,65.0,2.5,9.5,1.8,2.2,ifct_curated
+poha,Kanda Poha (Flattened Rice),breakfast,tempered,180.0,3.0,32.0,4.5,2.0,ifct_curated
+upma,Rava Upma (Semolina),breakfast,cooked_tempered,160.0,4.0,27.0,4.0,1.8,ifct_curated
+samosa,Fried Potato Samosa,snacks,deep_fried,262.0,4.5,32.0,13.0,2.5,ifct_curated
+gulab_jamun,Gulab Jamun,desserts,fried_sugar_syrup,320.0,4.0,52.0,11.0,0.5,ifct_curated
+salad_greens,Mixed Fresh Salad Greens,vegetables,raw,20.0,1.5,3.6,0.2,2.1,usda_fdc
+cucumber,Fresh Cucumber Slices,vegetables,raw,15.0,0.7,3.6,0.1,0.5,usda_fdc
+tomato,Fresh Sliced Tomato,vegetables,raw,18.0,0.9,3.9,0.2,1.2,usda_fdc
+apple,Fresh Apple,fruits,raw,52.0,0.3,13.8,0.2,2.4,usda_fdc
+banana,Fresh Banana,fruits,raw,89.0,1.1,22.8,0.3,2.6,usda_fdc
+orange,Fresh Orange,fruits,raw,47.0,0.9,11.8,0.1,2.4,usda_fdc
+plain_yogurt_curd,Plain Yogurt / Dahi,dairy,fermented,61.0,3.5,4.7,3.3,0.0,usda_fdc
+french_fries,French Fries,snacks,deep_fried,312.0,3.4,41.4,14.7,3.8,usda_fdc
+pizza_slice,Cheese Pizza Slice,fast_food,baked,266.0,11.3,33.3,9.8,2.3,usda_fdc
+pasta_tomato,Pasta in Tomato Sauce,pasta,boiled_simmered,125.0,4.5,24.0,1.5,2.0,usda_fdc

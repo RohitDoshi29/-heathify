@@ -1,0 +1,61 @@
+# Environment and Secrets (CRITICAL: NEVER COMMIT KEYS)
+.env
+*.env
+backend/.env
+backend/.env.local
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+backend/.venv/
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Databases & Local Uploads
+*.db
+*.sqlite
+*.sqlite3
+food_calorie.db
+backend/food_calorie.db
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+
+# Flutter / Dart
+flutter_app/.dart_tool/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.pub-cache/
+flutter_app/.pub/
+flutter_app/build/
+build/
+.dart_tool/
+
+# Android
+flutter_app/android/.gradle/
+flutter_app/android/local.properties
+flutter_app/android/app/debug/
+flutter_app/android/app/release/
+flutter_app/android/app/profile/
+*.keystore
+*.jks
+
+# iOS / macOS
+flutter_app/ios/Pods/
+flutter_app/ios/.symlinks/
+flutter_app/ios/Flutter/Flutter.framework
+flutter_app/ios/Flutter/Flutter.podspec
+flutter_app/macos/Pods/
+flutter_app/macos/Flutter/ephemeral/
+
+# IDEs & System
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

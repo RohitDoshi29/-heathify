@@ -1,0 +1,37 @@
+name: food_calorie_app
+description: "AI-powered food calorie detection app (multi-engine estimation)."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Networking
+  http: ^1.2.1
+  dio: ^5.4.3+1
+
+  # Camera + image handling
+  camera: ^0.10.5+9
+  image_picker: ^1.1.2
+
+  # State management
+  provider: ^6.1.2
+
+  # Charts for history/trend screens
+  fl_chart: ^0.68.0
+
+  # Local formatting / utils
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

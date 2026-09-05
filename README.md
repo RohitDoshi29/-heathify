@@ -61,19 +61,16 @@ Android emulator's alias for the host machine's `localhost`. Update the
 
 ## What's implemented
 
-| Component / Engine | Status | Notes |
+| Component / Engine | Status | Architecture & Implementation Details |
 |---|---|---|
-| **Flutter Mobile App** | **Implemented** | Full navigation, camera/gallery scanner, history, macro charts, low-confidence retry prompts, live on Android |
-| **API Client (`ApiService`)** | **Implemented** | Dual-mode connectivity (ADB reverse localhost + Wi-Fi LAN IP fallback) |
-| **FastAPI Backend & Routers** | **Implemented** | Endpoints `/api/analyze`, `/api/meals`, `/api/correction`, `/api/health` |
-| **Food Detection (Engine 1)** | **Implemented** | YOLO-family detector service with bounding box extraction and confidence scoring |
-| **Pixel Segmentation (Engine 2)** | **Implemented** | SAM/UNet foreground mask generation and pixel area calculation |
-| **Monocular Depth (Engine 3)** | **Implemented** | Depth relief map, voxel volume calculation, and height integration |
-| **Portion & Density (Engine 4)** | **Implemented** | Empirical density prior regression across 10 food categories |
-| **Nutrition Database (Engine 5)** | **Implemented** | Seeded USDA FoodData Central + Indian food database with SQLite/Postgres persistence |
-| **VLM Verifier (Engine 5B)** | **Implemented** | Vision-Language candidate disambiguation and candidate re-ranking |
-| **Multi-Engine Fusion (Engine 6)** | **Implemented** | Median Absolute Deviation (MAD) modified Z-score outlier filtering + consensus |
-| **Reference Object Scaling** | **Implemented** | Fiducial card/coin detection for metric pixel-to-cm calibration |
-| **Continuous Learning (Phase 6)**| **Implemented** | User correction tracking in `FEEDBACK` table & automated benchmark evaluation (`run_evaluation.py`) |
-| **Production & Telemetry (Phase 7)**| **Implemented** | Dockerfile, docker-compose, latency budgets (`PERFORMANCE.md`), privacy TTL cleanup (`PRIVACY.md`), diagnostic health checks |
+| **Primary Food Detection & Portions (Engine 1)** | **Implemented (VLM Primary)** | Real-time multimodal vision via Gemini 2.5 Flash (`gemini-2.5-flash`). Detects exact food items, bounding boxes, and visual portion weights (grams). Robust retry guard and fallback with explicit status reporting. |
+| **Context & Preparation Reasoner (Engine 4)** | **Implemented (VLM)** | Multimodal scene understanding for global meal context (Indian thali vs bowl), side dishes, and cooking cues. |
+| **Monocular Depth & Voxel Relief (Engine 2)** | **Implemented (Cross-Check)** | Monocular depth relief map and 3D height variation profile ($H_{mean}$) used as a secondary geometric sanity-check. |
+| **Portion Density Priors (Engine 3)** | **Implemented (Cross-Check)** | Empirical physical density priors ($\rho \in [0.38, 1.15]\text{ g/cm}^3$) across 10 food categories. |
+| **Nutrition Database (Engine 5)** | **Implemented (Authoritative)** | Seeded USDA FoodData Central + Indian food database with SQLite/Postgres persistence and fuzzy name matching. |
+| **Frontier Expert Verifier (Engine 6)** | **Implemented (Frontier LLM)** | Gemini 2.5 Pro / Claude Sonnet verifier conditionally escalated for ambiguous dishes or high portion discrepancies ($>30\%$). |
+| **Custom Fusion Engine (Engine 7)** | **Implemented (Real Math)** | Median Absolute Deviation (MAD) modified Z-score outlier filtering, inter-engine consensus scoring, and dynamic confidence bands. |
+| **Flutter Mobile Client** | **Implemented (Live)** | Full navigation, camera/gallery scanner, history, macro charts, low-confidence retry prompts, live on physical Android devices. |
+| **Production & Telemetry** | **Implemented** | Dockerfile, docker-compose, latency budgets (`PERFORMANCE.md`), privacy TTL cleanup (`PRIVACY.md`), and diagnostic health checks. |
+
 

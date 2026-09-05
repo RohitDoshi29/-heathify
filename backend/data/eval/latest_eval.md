@@ -1,5 +1,5 @@
 # Comprehensive AI Calorie Estimation Evaluation Report
-**Generated:** 2026-09-05 09:29:18 UTC
+**Generated:** 2026-09-05 09:44:10 UTC
 **Evaluated Samples:** 40 portion ground truth instances across 10 food categories
 
 ## Executive Summary
@@ -60,8 +60,8 @@
 ---
 
 ## 5. Continuous Learning & User Corrections
-- **Total Stored User Corrections**: `13`
-- **Average User Adjustment Delta**: `192.67 g`
+- **Total Stored User Corrections**: `15`
+- **Average User Adjustment Delta**: `196.7 g`
 - **Training Loop Status**: User corrections are persisted in the `FEEDBACK` table ready for periodic regression re-weighting.
 
 ---

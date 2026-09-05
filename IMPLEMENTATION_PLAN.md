@@ -1,299 +1,98 @@
-# Implementation Plan (Agent-Readable)
+# Heathify — Detailed Remediation & Implementation Plan
 
-**Purpose of this file:** this is a self-contained task list for an autonomous
-coding agent (or a human) to pick up this repository and know exactly what to
-build next, in what order, touching which files, with a clear definition of
-done for each task. It assumes the starter scaffold in this repo already
-exists (`flutter_app/`, `backend/`) and turns the master plan's roadmap into
-concrete, checkable work items.
-
-## How to use this file
-
-1. Work through phases **in order** (0 → 7). Do not start a phase whose
-   dependencies aren't marked done.
-2. Each task has a stable ID (`P{phase}-T{n}`). Reference the ID in commit
-   messages.
-3. Each task lists exactly which files to create or modify. If a file
-   doesn't exist yet, create it; if it exists, edit in place — do not
-   duplicate logic elsewhere.
-4. Each task has **Acceptance Criteria** — a task is not done until every
-   criterion is met and reproducible (a test, a command that succeeds, or an
-   observable behavior).
-5. When a task is complete, check its box. Do not check a box speculatively.
-6. If a task's acceptance criteria can't be met as written, stop and flag it
-   rather than silently changing scope.
+**Repo:** `RohitDoshi29/-heathify`
+**Prepared from:** direct review of `backend/app/services/*.py` and `backend/app/routers/analyze.py`
+**Core problem:** the README claims 6 ML "engines" are Implemented; in reality only one has a real-model code path (Gemini Vision), and it's silently disabled unless an API key is set. Everything else is hardcoded heuristics (average RGB color, fixed density tables, fixed "mound height" tables). This is why food photos return wrong results.
 
 ---
 
-## Phase 0 — Feasibility Spike (blocks everything else)
+## Guiding principle
 
-**Goal:** prove the core assumption (portion weight can be estimated well
-enough from photos) before investing in six engines around it.
-
-- [ ] **P0-T1 — Collect a small ground-truth dataset**
-  - Files: `backend/data/spike/images/`, `backend/data/spike/labels.csv`
-  - Description: Manually photograph and weigh ~50 plated portions across
-    3-5 of the starter food classes (e.g. steamed rice, dal tadka). Record
-    columns: `image_filename, food_label, actual_weight_g, camera_angle,
-    has_reference_object`.
-  - Acceptance criteria: `labels.csv` exists with ≥50 rows, each row's image
-    file exists in `images/`, no missing weights.
-
-- [ ] **P0-T2 — Baseline portion estimate script**
-  - Files: `backend/scripts/spike_baseline.py`
-  - Description: Run segmentation area (or a simple manual bounding-box
-    area) against `labels.csv` and compute MAE/MAPE between estimated and
-    actual weight using area-only heuristics (no depth yet).
-  - Acceptance criteria: script runs end-to-end and prints MAE (grams) and
-    MAPE (%) to stdout; results saved to `backend/data/spike/baseline_results.csv`.
-
-- [ ] **P0-T3 — Go/no-go decision doc**
-  - Files: `backend/data/spike/GO_NO_GO.md`
-  - Description: Record baseline MAPE, whether it's within a usable range
-    (e.g. <30% MAPE = proceed to Phase 1; higher = investigate depth
-    urgently before Phase 2, or revisit reference-object mode as default).
-  - Acceptance criteria: file states a numeric MAPE and an explicit decision
-    ("proceed" / "revisit approach").
-
-**Definition of done for Phase 0:** `GO_NO_GO.md` says "proceed."
+Don't try to build 6 real computer-vision models before you ship something correct. Get one real signal working end-to-end first (Tier 0–1), verify accuracy on real photos, then decide if you actually need offline/no-API computer vision (Tier 2) or if the VLM-based approach is good enough for your use case.
 
 ---
 
-## Phase 1 — MVP (nutrition DB + basic detector + backend + simple UI)
+## Tier 0 — Immediate fix (target: same day)
 
-**Goal:** full end-to-end meal calculation works, with manual quantity entry
-allowed as a fallback.
+**Goal:** confirm whether the accuracy problem is simply "no API key configured," and stop it from failing silently again.
 
-- [x] **P1-T1 — Real nutrition database**
-  - Files: `backend/app/services/nutrition_service.py`, new
-    `backend/data/nutrition_seed.csv`, `backend/scripts/seed_nutrition.py`
-  - Description: Replace the in-memory `_PLACEHOLDER_TABLE` with a seed
-    script that loads preparation-aware records (see plan section 9) from
-    USDA FoodData Central plus a curated Indian-food layer into the
-    `nutrition` table (`app/models/database.py`). Update `lookup_nutrition`
-    to query the DB via SQLAlchemy session instead of the dict.
-  - Acceptance criteria: `seed_nutrition.py` populates ≥30 food records
-    (matching plan section 12's starter list); `lookup_nutrition("steamed_rice")`
-    returns a DB-backed record, not the placeholder.
+| # | Task | File(s) | Details |
+|---|------|---------|---------|
+| 0.1 | Get a Gemini API key | `backend/.env` | Google AI Studio → create key → `GEMINI_API_KEY=...` in `.env` (copy from `.env.example`) |
+| 0.2 | Restart backend, re-test | — | Re-upload the egg photo and 3–4 other test photos. Confirm `detect()` is hitting `_detect_via_gemini_flash` (check logs for `[Engine 1 Detection] Gemini 2.5 Flash detected:`) |
+| 0.3 | Fail loudly instead of silently | `detection_service.py`, `main.py` | On startup, log a clear warning if `GEMINI_API_KEY` is missing or too short. Currently `detect()` just falls through to the color heuristic with no visible signal to the developer. Add: `logger.warning("GEMINI_API_KEY not set — using placeholder color-detection fallback, accuracy will be poor")` |
+| 0.4 | Surface fallback status in the API response | `models/schemas.py`, `analyze.py` | Add a `detection_method` field to the response (`"vlm"` vs `"heuristic_fallback"`) so the Flutter app / you can see when a result came from the fake path |
+| 0.5 | Add a timeout/retry guard | `detection_service.py` | Current Gemini call has an 8s timeout with no retry; on transient failure it silently drops to the fallback. Add one retry before falling back, and log the failure reason distinctly from "no key configured" |
 
-- [x] **P1-T2 — Wire up database persistence**
-  - Files: `backend/app/main.py`, `backend/app/routers/analyze.py`,
-    `backend/app/routers/meals.py`
-  - Description: Call `init_db()` on startup. Replace `_PLACEHOLDER_MEALS`
-    in `meals.py` with real queries. Have `analyze.py` write a `Meal` +
-    `MealItem` rows via a DB session instead of only returning a response.
-  - Acceptance criteria: after calling `POST /api/analyze`, the same meal
-    is retrievable via `GET /api/meal/{id}` and appears in `GET /api/meals`.
-
-- [x] **P1-T3 — Real food detector (replace Engine 1 stub)**
-  - Files: `backend/app/services/detection_service.py` (new),
-    `backend/app/routers/analyze.py`
-  - Description: Fine-tune or use a pretrained YOLO-family model
-    (`ultralytics`) on the 30-50 starter food classes. Load the model once
-    at startup (see `app/main.py` lifespan). Replace `_run_detection_stub`
-    with a call into this service.
-  - Acceptance criteria: `detection_service.detect(image_bytes)` returns a
-    list of `(label, confidence, bbox)` for a real test image, not a fixed
-    list.
-
-- [x] **P1-T4 — Manual quantity entry fallback in Flutter**
-  - Files: `flutter_app/lib/screens/results_screen.dart`
-  - Description: The existing `_editWeight` dialog already supports manual
-    correction — extend it so a food item with `confidence < 0.5` (or a
-    detection failure) prompts the user to enter quantity manually before
-    calories are calculated, rather than showing a low-confidence guess as
-    final.
-  - Acceptance criteria: manually entering a weight for a zero-confidence
-    item recalculates calories and clears the "needs input" state.
-
-**Definition of done for Phase 1:** a photo taken in the Flutter app
-produces a saved meal with real (non-placeholder) nutrition data, retrievable
-from history.
+**Acceptance criteria:** every `/api/analyze` response tells you which detection path was used, and you can no longer accidentally test against the fake path without knowing it.
 
 ---
 
-## Phase 2 — AI Portion (segmentation + first portion estimator)
+## Tier 1 — Architectural fix: collapse the fake pipeline into one real signal (target: 3–5 days)
 
-**Goal:** system can estimate grams without manual entry.
+**Problem:** `analyze.py` chains detection → segmentation → depth → portion → VLM-verify → fusion. Only detection *can* be real; segmentation/depth/portion are pure heuristics dressed up as "Engine 2/3/4." Chaining fake numbers through a real statistical fusion step (MAD outlier rejection) doesn't make them accurate — garbage in, garbage out.
 
-- [x] **P2-T1 — Segmentation engine**
-  - Files: `backend/app/services/segmentation_service.py` (new)
-  - Description: Add pixel-level mask generation (Engine 2) using the same
-    detector backbone or a dedicated segmentation head. Output per-item
-    mask + pixel area.
-  - Acceptance criteria: `segmentation_service.segment(image_bytes, bbox)`
-    returns a mask array and area in pixels for a real test image.
+**Fix:** make the VLM the primary source of truth for identification *and* a first-pass weight/calorie estimate, and treat the heuristic engines as a secondary cross-check only, not a co-equal "engine."
 
-- [x] **P2-T2 — Portion/weight model (trained on P0-T1 data + more)**
-  - Files: `backend/app/services/portion_service.py` (new)
-  - Description: Train a regression model (area + food-density prior →
-    grams) on the portion/weight dataset (expand P0-T1 to ≥200 samples per
-    plan section 11 priority). Replace `_run_portion_estimation_stub`'s
-    `portion_model` estimate with a real call into this service.
-  - Acceptance criteria: MAE on a held-out test split is measured and
-    logged in `backend/data/eval/portion_model_eval.md`.
+| # | Task | File(s) | Details |
+|---|------|---------|---------|
+| 1.1 | Extend the Gemini prompt to also return portion/weight estimate | `detection_service.py` | Add `estimated_weight_g` (with a plausible range) to the JSON schema Gemini already returns. Gemini/VLMs are reasonably good at "this looks like ~150g of rice" from visual portion cues — better than a fixed density-times-fixed-height calculation. |
+| 1.2 | Add a second, independent VLM call for weight/calorie sanity-check | `engine6_expert_verifier.py` (repurpose existing file) | Use a stronger model (Gemini 2.5 Pro / Claude) as a genuine second opinion on total plate calories, not just a rule-based "confusing pairs" dictionary as it is today. |
+| 1.3 | Rename heuristic services honestly in code and API output | `segmentation_service.py`, `depth_service.py`, `portion_service.py` | Change `method` field values from implying real CV (e.g. `"sam_segmentation"`) to explicit `"heuristic_estimate"` / `"density_prior_fallback"`. This prevents future-you (or a teammate) from trusting these numbers as if a real model produced them. |
+| 1.4 | Feed heuristic estimates into fusion only as a low-weight sanity check | `fusion_service.py` | Lower the confidence weight assigned to heuristic-sourced `WeightEstimate` entries so real VLM numbers dominate the fused result when both are present. |
+| 1.5 | Simplify `analyze.py` control flow | `routers/analyze.py` | Reduce from a 6-stage sequential chain to: (a) VLM identify + estimate, (b) heuristic cross-check in parallel, (c) fusion, (d) nutrition lookup. Fewer sequential stages = lower latency and fewer places for silent fallback. |
+| 1.6 | Update README to match reality | `README.md` | Replace the "Implemented" table with accurate status per engine (e.g. "Detection: VLM-based, requires API key; heuristic fallback exists but is low-accuracy"). |
 
-**Definition of done for Phase 2:** `/api/analyze` returns weight estimates
-with zero manual input, and a documented MAE exists.
+**Acceptance criteria:** a test set of ~20 varied food photos (see Tier 3 testing) gets correct food identification in the large majority of cases, and you can see confidence + method for each item in the response.
 
 ---
 
-## Phase 3 — Depth (depth model + volume logic)
+## Tier 2 — Real offline computer vision (only if you need to remove the API dependency)
 
-**Goal:** depth measurably improves accuracy over Phase 2 alone.
+Do this tier **only if** you specifically need the app to work without a paid/rate-limited external API call (cost, offline use, latency, or privacy reasons). It is materially more engineering work than Tier 0–1.
 
-- [x] **P3-T1 — Depth estimation engine**
-  - Files: `backend/app/services/depth_service.py` (new)
-  - Description: Add a monocular depth model (Engine 3). Combine with
-    segmentation mask + reference scale to estimate volume, not just area.
-    Feed as an additional `WeightEstimate(source="depth", ...)` into
-    `fusion_service.fuse_weight_estimates`.
-  - Acceptance criteria: an ablation test (`backend/data/eval/ablation.md`)
-    compares MAE for "segmentation only" vs "segmentation + depth" and
-    shows the actual measured delta (do not assume improvement — plan
-    section 17 explicitly requires this to be measured, not assumed).
+| # | Task | Effort | Details |
+|---|------|--------|---------|
+| 2.1 | Real object detection | Medium–High | Fine-tune YOLOv8 (or use a pretrained food-detection checkpoint) on a labeled food dataset. Food-101 covers general dishes; for Indian food specifically (your density table is India-focused: dal, roti, paneer, biryani) you'll want an Indian-food dataset or to label your own ~500–1000 images. |
+| 2.2 | Real segmentation | Medium | Integrate Segment Anything (SAM) or MobileSAM, feeding in the YOLO bounding boxes as prompts, to replace the Pillow contour heuristic in `segmentation_service.py`. |
+| 2.3 | Real depth/volume estimation | Medium–High | Integrate a monocular depth model (MiDaS or Depth Anything) to replace the hardcoded "typical mound height per food category" table in `depth_service.py`. Calibrate pixel-to-cm scale using the existing `reference_service.py` fiducial-object logic (that part's design is reasonable, just needs a real detector behind it instead of the average-brightness heuristic). |
+| 2.4 | Retrain portion/density model on real data | Medium | You already have `backend/data/portion_training_data.csv` — check whether it has enough labeled samples to fit a proper regression instead of the fixed dictionary in `portion_service.py`. |
+| 2.5 | Model hosting/inference infra | Medium | Decide GPU vs CPU inference, containerize model weights (don't commit them to git), add a model-download step to `Dockerfile`. |
 
-**Definition of done for Phase 3:** ablation doc exists with real numbers,
-whichever direction they point.
+**Note:** this tier is a multi-week project on its own, not a bugfix. Treat Tier 0–1 as the thing to ship first; revisit Tier 2 based on real usage/cost data.
 
 ---
 
-## Phase 4 — Fusion (reference estimator + VLM verifier + judge)
+## Tier 3 — Make it honest, testable, and hard to silently regress
 
-**Goal:** multiple estimates are fused and outliers are handled.
-
-- [x] **P4-T1 — Reference-object scale estimator**
-  - Files: `backend/app/services/reference_service.py` (new)
-  - Description: Detect a known-size reference object (coin/card/standard
-    plate) in frame when `reference_mode=True` and use its known dimensions
-    to calibrate pixel-to-cm scale, feeding a `WeightEstimate(source="reference", ...)`.
-  - Acceptance criteria: with a test image containing a known reference
-    object, the estimated scale factor is within a documented tolerance of
-    the true scale.
-
-- [x] **P4-T2 — VLM verifier (Engine 5B)**
-  - Files: `backend/app/services/vlm_service.py` (new)
-  - Description: Call a vision-language model to disambiguate visually
-    similar foods (e.g. rajma vs chole, plain rice vs biryani) per plan
-    section 3. Treat its output as a verifier/re-ranker of Engine 1's
-    candidate labels, never as the nutrition ground truth.
-  - Acceptance criteria: given an ambiguous test image, `vlm_service`
-    returns an alternative label + confidence distinct from Engine 1's
-    top guess, and `analyze.py` uses it to re-rank, not override outright.
-
-- [x] **P4-T3 — Real outlier-aware fusion**
-  - Files: `backend/app/services/fusion_service.py`
-  - Description: Replace the median-ratio heuristic with a calibrated
-    outlier detection method (e.g. MAD-based) validated against real
-    multi-engine data now that P2/P3/P4-T1/P4-T2 exist.
-  - Acceptance criteria: unit tests in `backend/tests/test_fusion_service.py`
-    cover at least one clear-outlier case and one all-agree case, both
-    passing.
-
-**Definition of done for Phase 4:** all four estimate sources (portion
-model, depth, reference, VLM-informed label) feed into fusion, with outlier
-handling backed by tests.
+| # | Task | File(s) | Details |
+|---|------|---------|---------|
+| 3.1 | Build a fixed test image set | new: `backend/tests/fixtures/` | 15–20 photos spanning your supported categories (egg, rice, dal, roti, paneer curry, salad, biryani, mixed plates, poor lighting, cluttered background). Include the exact egg photo that failed. |
+| 3.2 | Add regression tests asserting expected labels | `backend/tests/` | For each fixture image, assert the returned `food_id` matches expectation and confidence is above a threshold. Run this in CI on every PR so a future "oops, forgot the API key" doesn't ship silently again. |
+| 3.3 | Expand nutrition DB coverage | `backend/data/nutrition_seed.csv` | README claims "seeded USDA FoodData Central + Indian food database" — currently it's a small CSV. Pull a broader USDA FDC export and merge, dedupe against your existing IDs. |
+| 3.4 | Wire up `init_db()` properly | `models/database.py`, deployment scripts | README notes tables aren't auto-created on startup. Add an Alembic migration or startup hook so this isn't a manual step someone forgets in production. |
+| 3.5 | Replace in-memory `/api/meals` placeholder with real persistence | `routers/meals.py` | Currently serves an in-memory placeholder list per the README — wire it to the actual DB models that already exist. |
+| 3.6 | Add a confidence-based UI warning | Flutter app | The Flutter app already has "low-confidence retry prompts" per the README — make sure this is actually wired to the `detection_method`/confidence fields so users see "low confidence, please confirm" instead of trusting a fallback guess silently. |
 
 ---
 
-## Phase 5 — Confidence (confidence score + retry flow)
+## Suggested execution order
 
-**Goal:** system knows when to ask for another image.
-
-- [x] **P5-T1 — Enforce confidence bands end-to-end**
-  - Files: `backend/app/routers/analyze.py`, `backend/app/models/schemas.py`,
-    `flutter_app/lib/screens/analysis_screen.dart`
-  - Description: `analyze.py` currently computes `confidence_band()` but
-    discards it (`_ = confidence_band(...)`). Add a `retry_recommended: bool`
-    and `retry_reason: str | None` field to `MealOut`/`schemas.py`. When
-    band is `"low"`, set `retry_recommended=True`. Update the Flutter
-    `AnalysisScreen` to show a "take another photo" prompt (reference mode
-    suggested) instead of navigating straight to Results when
-    `retry_recommended` is true.
-  - Acceptance criteria: a synthetic low-confidence response triggers the
-    retry UI in the Flutter app instead of the Results screen.
-
-**Definition of done for Phase 5:** low-confidence results never
-silently show as final without a retry prompt.
+1. **Today:** Tier 0 (API key + logging) — find out if this alone fixes it.
+2. **This week:** Tier 1 (collapse to VLM-primary pipeline, honest labeling, README fix).
+3. **Ongoing:** Tier 3.1–3.2 (test fixtures + regression tests) — do this *before* Tier 2 so you have a baseline to measure real-model improvements against.
+4. **Only if needed:** Tier 2 (real offline CV models) — treat as a separate project phase, not a quick fix.
 
 ---
 
-## Phase 6 — Learning (feedback capture + evaluation pipeline)
+## Quick reference: what's real vs. fake today
 
-**Goal:** user corrections are reusable training/evaluation data.
-
-- [x] **P6-T1 — Persist corrections properly**
-  - Files: `backend/app/routers/correction.py`, `backend/app/models/database.py`
-  - Description: Replace the `# TODO: persist` stub with a real INSERT
-    into the `feedback` table, storing `predicted_weight` (fetched from the
-    referenced `meal_item_id`) alongside `corrected_weight`.
-  - Acceptance criteria: submitting a correction via `POST /api/correction`
-    creates a row in `feedback` queryable by `meal_item_id`.
-
-- [x] **P6-T2 — Evaluation pipeline**
-  - Files: `backend/scripts/run_evaluation.py` (new)
-  - Description: Build a script that reads `feedback` rows plus held-out
-    test sets and recomputes MAE/RMSE/MAPE per plan section 17, writing
-    results to `backend/data/eval/latest_eval.md` on each run.
-  - Acceptance criteria: running the script against seeded feedback data
-    produces a non-empty `latest_eval.md` with all five metrics listed in
-    plan section 17 (detection P/R/F1/mAP, segmentation IoU, weight
-    MAE/RMSE/MAPE, calorie MAE, calibration).
-
-**Definition of done for Phase 6:** corrections flow into a file an agent
-or human can read to see whether the system is improving.
-
----
-
-## Phase 7 — Productionization (dashboard, performance, deployment, monitoring)
-
-**Goal:** stable, demo-ready production prototype.
-
-- [x] **P7-T1 — Latency and cost budget enforcement**
-  - Files: `backend/app/routers/analyze.py`, `backend/PERFORMANCE.md`
-  - Description: Add timing instrumentation around each engine call; log
-    to stdout/monitoring. Define and enforce a target end-to-end latency
-    (state the number explicitly in a new `backend/PERFORMANCE.md`, e.g.
-    "<5s p95"). If a request exceeds budget, log a warning.
-  - Acceptance criteria: `PERFORMANCE.md` states a concrete latency and
-    cost target; logs show per-engine timing for at least one real request.
-
-- [x] **P7-T2 — Privacy and retention policy implementation**
-  - Files: `backend/PRIVACY.md` (new), `backend/app/services/privacy_service.py`, `backend/scripts/cleanup_retention.py`
-  - Description: Implement whatever retention policy is documented (e.g.
-    auto-delete raw images after N days, anonymize `feedback` rows used for
-    retraining).
-  - Acceptance criteria: `PRIVACY.md` states the policy; at least one
-    concrete mechanism (a cron script, a TTL field, or a redaction step) is
-    implemented, not just documented.
-
-- [x] **P7-T3 — Deployment**
-  - Files: `backend/Dockerfile` (new), `backend/docker-compose.yml` (new), `backend/.dockerignore`
-  - Description: Containerize the FastAPI service + PostgreSQL for a
-    reproducible deploy.
-  - Acceptance criteria: `docker-compose up` brings up a working API
-    reachable at `/api/health`.
-
-- [x] **P7-T4 — Monitoring dashboard**
-  - Files: `backend/app/routers/health.py`, new `backend/DASHBOARD.md`
-  - Description: Extend `/api/health` to report per-engine model load
-    status (per the existing TODO in `health.py`). Document what a minimal
-    ops dashboard should show (error rate, retry rate, avg confidence).
-  - Acceptance criteria: `GET /api/health` reports status for each engine
-    individually, not just a single "ok".
-
-**Definition of done for Phase 7:** the system can be deployed with one
-command, exposes real health/perf signals, and has a written privacy policy
-with at least one enforced mechanism.
-
----
-
-## Global Definition of Done (entire project)
-
-- [x] Every phase above is checked off in order.
-- [x] `README.md`'s "What's implemented vs. stubbed" table is updated to
-  reflect reality after each phase (no stale claims).
-- [x] A documented, numeric accuracy target from plan section 17 is met or
-  explicitly reported as not-yet-met with current numbers — never left
-  unstated.
-
+| Engine | README claims | Actually is |
+|---|---|---|
+| Detection | Implemented (YOLO) | Gemini Vision call *if* API key set, else average-RGB-color bucket match, defaulting to "Boiled Egg" |
+| Segmentation | Implemented (SAM/UNet) | Pillow edge heuristics, fixed 78% foreground-ratio fallback |
+| Depth | Implemented | Hardcoded per-category mound-height lookup table |
+| Portion/Density | Implemented | Hardcoded density dictionary (reasonable values, but not measured/learned) |
+| VLM Verifier | Implemented | Rule-based dictionary of "confusing food pairs," no actual VLM call |
+| Fusion | Implemented | **Genuinely real** — proper MAD-based outlier rejection math |
+| Nutrition DB | USDA FDC + Indian DB | Small seeded CSV with reasonable fallback logic |

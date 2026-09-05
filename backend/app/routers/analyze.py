@@ -1,13 +1,13 @@
 """
 POST /api/analyze - Complete 7-Engine Multi-Stage AI Pipeline:
 
-  Image -> [Engine 1: YOLO Segmentation] (BBoxes + Masks + Food Classes)
-        -> [Engine 2: Depth Model] (3D Relief Height & Voxel Volume)
-        -> [Engine 3: Portion Model] (Density Priors & 2D/3D Geometry)
-        -> [Engine 4: Gemini 1.5 Flash] (Fast Food & Context Understanding)
-        -> [Engine 5: Nutrition DB] (Authoritative USDA & Curated Nutrition)
-        -> [Engine 6: Gemini 2.5 Pro / Claude Sonnet 4.6] (Difficult-Case Deep Verifier)
-        -> [Engine 7: Custom Fusion Engine] (MAD Outlier Rejection, Uncertainty & Calibration)
+  Image -> [Engine 1: Primary VLM Detection & Visual Portion] (Gemini 2.5 Flash)
+        -> [Engine 4: Context & Preparation Reasoner] (Gemini 1.5/2.5 Flash)
+        -> [Engine 2: Depth Model Cross-Check] (3D Relief Height & Voxel Volume)
+        -> [Engine 3: Portion Density Cross-Check] (Empirical Density Priors)
+        -> [Engine 6: Frontier Verifier Escalation] (Gemini 2.5 Pro / Claude Sonnet)
+        -> [Engine 7: Custom MAD Fusion Engine] (MAD Outlier Filtering & Calibration)
+        -> [Engine 5: Nutrition DB] (Authoritative USDA & Curated DB)
         -> DB Persistence (Meal + MealItems)
         -> API Response.
 """
@@ -54,6 +54,8 @@ async def analyze_meal(
             confidence=0.0,
             calorie_range_low=0.0,
             calorie_range_high=0.0,
+            detection_method="heuristic_fallback",
+            model_used="none",
         )
 
     timings = {}
@@ -63,13 +65,13 @@ async def analyze_meal(
     ref_scale = reference_service.detect_reference_scale(image_bytes, reference_mode=reference_mode)
     timings["ref_scale_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-    # 1. Engine 1: YOLO Segmentation (BBoxes, Classes, Foreground Masks)
+    # 1. Engine 1: Primary VLM Detection & Visual Portion Extraction (Gemini 2.5 Flash)
     t0 = time.perf_counter()
     detected_items = detection_service.detect(image_bytes)
     initial_labels = [item.food_id for item in detected_items]
-    timings["engine_1_yolo_seg_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+    timings["engine_1_detection_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-    # 2. Engine 4: Gemini 1.5 Flash (Global Food & Context Understanding)
+    # 2. Engine 4: Flash Context Understanding
     t0 = time.perf_counter()
     flash_context = engine4_flash.analyze_context(image_bytes, initial_detections=initial_labels)
     timings["engine_4_flash_context_ms"] = round((time.perf_counter() - t0) * 1000, 2)
@@ -85,11 +87,18 @@ async def analyze_meal(
     timings["engine_6_expert_verifier_ms"] = 0.0
     timings["engine_7_custom_fusion_ms"] = 0.0
 
+    overall_detection_method = "vlm"
+    primary_model_used = "gemini-2.5-flash"
+
     for item in detected_items:
+        if item.detection_method == "heuristic_fallback":
+            overall_detection_method = "heuristic_fallback"
+            primary_model_used = item.model_used
+
         # Engine 1 Segmentation Mask
         seg = segmentation_service.segment(image_bytes, item.bbox)
 
-        # Engine 2: Depth Model (3D Height & Voxel Volume)
+        # Engine 2: Depth Model Cross-Check (3D Height & Voxel Volume)
         t0 = time.perf_counter()
         depth_est = depth_service.estimate_depth_and_volume(
             image_bytes=image_bytes,
@@ -100,7 +109,7 @@ async def analyze_meal(
         )
         timings["engine_2_depth_ms"] += (time.perf_counter() - t0) * 1000
 
-        # Engine 3: Portion Model (Physical Density Priors)
+        # Engine 3: Portion Model Density Prior Cross-Check
         t0 = time.perf_counter()
         portion_est = portion_service.estimate_weight(
             food_id=item.food_id,
@@ -109,18 +118,18 @@ async def analyze_meal(
         )
         timings["engine_3_portion_ms"] += (time.perf_counter() - t0) * 1000
 
-        # Discrepancy check between depth volume and portion prior
+        active_food_id = item.food_id
+        active_confidence = item.confidence
+        density_factor = 1.0
+
+        # Discrepancy between depth volume and portion prior
         discrepancy_pct = (
             abs(depth_est.estimated_weight_g - portion_est.estimated_weight_g)
             / max(1.0, portion_est.estimated_weight_g)
             * 100.0
         )
 
-        active_food_id = item.food_id
-        active_confidence = item.confidence
-        density_factor = 1.0
-
-        # Engine 6: Gemini 2.5 Pro / Claude Sonnet 4.6 (Selective Escalation for Difficult Cases)
+        # Engine 6: Frontier Escalation for Difficult Cases
         if engine6_expert.should_escalate_to_expert(
             initial_confidence=item.confidence,
             candidate_label=item.food_id,
@@ -140,23 +149,40 @@ async def analyze_meal(
             density_factor = expert_res.density_adjustment_factor
             timings["engine_6_expert_verifier_ms"] += (time.perf_counter() - t0) * 1000
 
-        # Engine 7: Custom Fusion Engine (MAD Outlier Rejection & Weight Consensus)
+        # Engine 7: Custom Fusion Engine
         t0 = time.perf_counter()
+        estimates = []
+
+        # (a) Primary VLM Visual Portion (Highest Weight)
+        if item.vlm_weight_g is not None and item.vlm_weight_g > 0:
+            estimates.append(
+                WeightEstimate(
+                    source="vlm_primary",
+                    grams=round(item.vlm_weight_g * density_factor, 1),
+                    confidence=0.95 if item.detection_method == "vlm" else 0.55,
+                )
+            )
+
+        # (b) Depth & Portion Density Cross-Checks
         adjusted_portion_w = portion_est.estimated_weight_g * density_factor
         adjusted_depth_w = depth_est.estimated_weight_g * density_factor
 
-        estimates = [
+        estimates.append(
             WeightEstimate(
                 source="portion_model",
                 grams=round(adjusted_portion_w, 1),
-                confidence=portion_est.confidence,
-            ),
+                confidence=portion_est.confidence * (0.80 if item.detection_method == "vlm" else 0.50),
+            )
+        )
+        estimates.append(
             WeightEstimate(
                 source="depth",
                 grams=round(adjusted_depth_w, 1),
-                confidence=depth_est.confidence,
-            ),
-        ]
+                confidence=depth_est.confidence * (0.80 if item.detection_method == "vlm" else 0.50),
+            )
+        )
+
+        # (c) Reference Scale Fiducial if detected
         if ref_scale.is_detected:
             density = portion_service.get_density(active_food_id) * density_factor
             calibrated_area_cm2 = seg.pixel_area * (ref_scale.cm_per_pixel ** 2)
@@ -172,7 +198,7 @@ async def analyze_meal(
         fused_weight, fused_confidence = fuse_weight_estimates(estimates)
         timings["engine_7_custom_fusion_ms"] += (time.perf_counter() - t0) * 1000
 
-        # Engine 5: Nutrition DB (Authoritative USDA & Curated Nutrition Facts)
+        # Engine 5: Nutrition DB Lookup
         t0 = time.perf_counter()
         nutrition = lookup_nutrition(active_food_id, db=db)
         calories = calculate_calories(fused_weight, nutrition.calories_100g)
@@ -184,7 +210,7 @@ async def analyze_meal(
 
         item_id = str(uuid.uuid4())
 
-        # Ensure food exists in DB for foreign key constraint
+        # Ensure food exists in DB
         db_food = db.query(DBFood).filter(DBFood.id == nutrition.food_id).first()
         if not db_food:
             db_food = DBFood(id=nutrition.food_id, name=nutrition.name)
@@ -211,6 +237,8 @@ async def analyze_meal(
                 carbs_g=carbs_g,
                 fat_g=fat_g,
                 confidence=round(fused_confidence, 2),
+                detection_method=item.detection_method,
+                model_used=item.model_used,
             )
         )
         weighted_confidences.append(fused_confidence)
@@ -255,7 +283,7 @@ async def analyze_meal(
     total_latency = time.perf_counter() - t_start
     timings["total_pipeline_ms"] = round(total_latency * 1000, 2)
 
-    logger.info(f"[Analyze 7-Engine] Finished in {timings['total_pipeline_ms']}ms | Engine timings: {timings}")
+    logger.info(f"[Analyze 7-Engine] Finished in {timings['total_pipeline_ms']}ms | Method={overall_detection_method} | Timings: {timings}")
 
     return MealOut(
         id=meal_id,
@@ -267,4 +295,6 @@ async def analyze_meal(
         confidence_band=band,
         retry_recommended=retry_recommended,
         retry_reason=retry_reason,
+        detection_method=overall_detection_method,
+        model_used=primary_model_used,
     )

@@ -1,8 +1,11 @@
 """
-Engine 6 - Multi-Engine Fusion & Consensus Judge.
+Engine 7 - Multi-Engine Fusion & Consensus Judge.
 
-Combines independent weight estimates from Portion Model (Engine 4), Monocular Depth (Engine 3),
-Reference Fiducial Scale, and VLM Verifier. Rejects statistical outliers using Median Absolute Deviation (MAD),
+Combines independent weight estimates:
+  - Primary Visual VLM Portions (Highest Weight)
+  - Reference Fiducial Scale
+  - Monocular Depth & Density Priors (Secondary Cross-Checks)
+Rejects statistical outliers using Median Absolute Deviation (MAD),
 calculates inter-engine consensus, and produces a calibrated confidence-weighted final estimate.
 """
 from dataclasses import dataclass
@@ -12,7 +15,7 @@ from typing import List, Tuple
 
 @dataclass
 class WeightEstimate:
-    source: str          # e.g. "portion_model", "depth", "reference", "vlm"
+    source: str          # e.g. "vlm_primary", "reference", "depth_heuristic", "portion_heuristic"
     grams: float
     confidence: float    # 0.0 - 1.0
 
@@ -45,7 +48,6 @@ def fuse_weight_estimates(
     kept: List[WeightEstimate] = []
 
     if mad == 0.0 or len(estimates) <= 2:
-        # Fallback to ratio from median when variance is zero or small sample
         for e in estimates:
             ratio = (e.grams / med) if med > 0 else 1.0
             if 0.40 <= ratio <= 2.50:
@@ -71,15 +73,12 @@ def fuse_weight_estimates(
         base_confidence = total_weight_conf / len(kept)
 
     # Inter-engine consensus scoring:
-    # Measure coefficient of variation among kept estimates: CV = std_dev / mean
     mean_val = sum(e.grams for e in kept) / len(kept)
     if len(kept) > 1 and mean_val > 0:
         variance = sum((e.grams - mean_val) ** 2 for e in kept) / len(kept)
         std_dev = variance ** 0.5
         cv = std_dev / mean_val  # relative dispersion (0.0 = perfect consensus)
         
-        # High consensus (cv < 0.08) boosts confidence up to +0.06
-        # Divergence (cv > 0.25) penalizes confidence up to -0.15
         if cv < 0.08:
             consensus_mod = 0.05
         elif cv > 0.25:
@@ -87,7 +86,6 @@ def fuse_weight_estimates(
         else:
             consensus_mod = 0.0
 
-        # Outlier rejection penalty
         outlier_penalty = 0.10 if len(kept) < len(estimates) else 0.0
         final_confidence = max(0.10, min(0.98, base_confidence + consensus_mod - outlier_penalty))
     else:

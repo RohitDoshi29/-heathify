@@ -6,10 +6,12 @@ These mirror the response shape expected by the Flutter app's
 """
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class FoodItemOut(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     food_id: str
     name: str
     estimated_weight_g: float
@@ -18,9 +20,13 @@ class FoodItemOut(BaseModel):
     carbs_g: float = 0.0
     fat_g: float = 0.0
     confidence: float = Field(ge=0.0, le=1.0)
+    detection_method: str = "vlm"  # "vlm" or "heuristic_fallback"
+    model_used: Optional[str] = "gemini-2.5-flash"
 
 
 class MealOut(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     id: str
     created_at: datetime
     image_url: Optional[str] = None
@@ -31,6 +37,8 @@ class MealOut(BaseModel):
     confidence_band: str = "high"  # "high", "medium", "low"
     retry_recommended: bool = False
     retry_reason: Optional[str] = None
+    detection_method: str = "vlm"  # "vlm" or "heuristic_fallback"
+    model_used: Optional[str] = "gemini-2.5-flash"
 
 
 class CorrectionIn(BaseModel):
@@ -45,3 +53,4 @@ class HealthOut(BaseModel):
     database: str = "connected"
     environment: str = "production"
     engines: dict[str, str] = Field(default_factory=dict)
+    api_key_configured: bool = True
